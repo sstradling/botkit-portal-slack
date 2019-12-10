@@ -59,7 +59,3 @@ controller.usePlugin(portal);
 
 
 Once registered, Botkit will automatically integrate Portal into your bot, where it will listen for support/helpdesk/feedback requests. All of the plugin's methodswill be available at `controller.plugins.portal`.
-
-## Class Reference
-
-* [BotkitCMSHelper](../docs/reference/cms.md)
