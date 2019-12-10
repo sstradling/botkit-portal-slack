@@ -1,0 +1,38 @@
+{
+  "name": "botkit-portal-slack",
+  "version": "1.0.0",
+  "description": "Add in-app customer support and ticketing to your Botkit app",
+  "main": "./lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "eslint": "eslint --fix src/*"
+  },
+  "files": [
+    "/lib",
+    "/src"
+  ],
+  "typings": "./lib/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sstradling/botkit-portal-slack.git"
+  },
+  "keywords": [
+    "botkit",
+    "bots",
+    "support",
+    "plugin",
+    "chatbots"
+  ],
+  "author": "seth.g.stradling@gmail.com",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/sstradling/botkit-portal-slack/issues"
+  },
+  "homepage": "https://github.com/sstradling/botkit-portal-slack#readme",
+  "bundleDependencies": false,
+  "dependencies": {
+    "botbuilder-adapter-slack": "1.0.7",
+    "botkit": "4.6.1",
+    "debug": "4.1.1"
+  }
+}
