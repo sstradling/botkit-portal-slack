@@ -5,13 +5,16 @@
   "main": "./lib/index.js",
   "scripts": {
     "build": "tsc",
-    "eslint": "eslint --fix src/*"
+    "eslint": "eslint --fix src/*",
+    "format": "prettier --write \"src/**/*.ts\" \"src/**/*.js\"",
+    "lint": "tslint -p tsconfig.json",
+    "test": "jest --config jestconfig.json"
   },
   "files": [
-    "/lib",
-    "/src"
+    "/lib/**/*"
   ],
   "typings": "./lib/index.d.ts",
+  "types": "./lib/index.d.ts",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sstradling/botkit-portal-slack.git"
@@ -34,5 +37,14 @@
     "botbuilder-adapter-slack": "1.0.7",
     "botkit": "4.6.1",
     "debug": "4.1.1"
+  },
+  "devDependencies": {
+    "@types/jest": "24.0.23",
+    "jest": "24.9.0",
+    "prettier": "1.19.1",
+    "ts-jest": "24.2.0",
+    "tslint": "5.20.1",
+    "tslint-config-prettier": "1.18.0",
+    "typescript": "3.7.3"
   }
 }
