@@ -29,7 +29,7 @@ if you want to trigger the support dialog/modal from an IM action, Portal listen
 
 You can configure specific slash ('/') and at ('@') commands for your bot using the following format: 
 ```{
-    commands: {
+    listeners: {
         slash: [
             {
                 <slash command>: [list of secondary keywords (e.g.: support, help, feedback)]
@@ -38,7 +38,6 @@ You can configure specific slash ('/') and at ('@') commands for your bot using 
         ],
         at: [list of secondary keywords],
         im: [list of im keywords that Portal should respond to with a modal]
-
     }
 }```
 

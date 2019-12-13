@@ -11,8 +11,7 @@
 import { Botkit, BotWorker} from "Botkit"
 import axios, { AxiosRequestConfig, AxiosPromise } from 'axios';
 import { SlackBotWorker, SlackAdapter } from "botbuilder-adapter-slack";
-
-
+import { lodash as _ } from 'lodash'
 
 export class BotkitPortalPlugin {
 
@@ -23,7 +22,8 @@ export class BotkitPortalPlugin {
     private __listener_url: string
 
     public name: string = 'Slack Portal Plugin'
-    private LISTENER_URL: string = 'add portal reciever url here' 
+    private LISTENER_URL: string = 'https://portal.convobox.com' //have a hard-coded version
+    private ACTION_ID: string = 'portal_support_modal_launch'
 
     /**
      * config should include:
@@ -43,13 +43,41 @@ export class BotkitPortalPlugin {
      * @param config 
      */
     public constructor(config: any) {
-        this.__config = config;
         if (config.controller) {
-            this.__controller = this.__config.controller;
-            this.__reciever_url = this.__config.reciever_url;
-            this.__botversion = this.__controller.version;
-            this.__listener_url = this.__config.listener_url ? this.__config.listener_url : this.LISTENER_URL
+            this.process_controller(config.controller)
         }
+        if (! config.reciever_url) {
+            throw new Error('config.reciever_url missing: Need Slack app base URL to recieve validate incoming responses from the Portal app') //there's a reciever url???
+        }
+        if (! config.portal_token) {
+            throw new Error('config.portal_token missing: Need an authentication token from the Portal app')
+        }
+        if (! config.client_secret) {
+            throw new Error('config.client_token missing: Need a client verification token to validate incoming responses from the Portal app')
+        }
+        if (! config.listeners) {
+            let keywords = ['support','help','helpdesk','feedback']
+            config.listeners = {
+                slash: {
+                    feedback: null,
+                    support: null,
+                    help: null,
+                    helpdesk: null
+                },
+                at: keywords,
+                im: ['im_portal_launch']
+            }
+            //create default listeners
+        }
+        if (! config.actions) {
+            config.actions = [this.ACTION_ID]
+        }
+        this.__config = config;
+    }
+
+    private process_controller(controller: Botkit): void {
+        this.__controller = controller
+        this.__botversion = controller.version
     }
 
     /**
@@ -57,12 +85,12 @@ export class BotkitPortalPlugin {
      * @param botkit : requires an initialized botkit instance
      */
     public init(botkit: Botkit): void {
-        this.__controller = botkit
+        this.process_controller(botkit)
         this.__controller.addDep('portal')
         const router = botkit.webserver
         // TODO verify that bot has necessary scopes (?) not sure this is necessary as we probably should just be using DMs?
         //  -- this depends on how the origin app interacts with users - if it's DM-heavy, we'll need an alternative
-        // TODO need to figure out how to initialize a handshake with the Portal servers/ handle billing info
+        // TODO need to figure out how to  initialize a handshake with the Portal servers/ handle billing info
         // ============ adds route for handling customer => client comms (passbacks) =========
         router.post(`${this.__reciever_url}/portal/update`, this.process_passback)
         if ( this.__botversion >=4 ) {
@@ -86,8 +114,46 @@ export class BotkitPortalPlugin {
      * @param next 
      */
     private process_incoming_message(bot, message, next): void {
-
-
+        let callback_id = ('callback_id' in message)? message.callback_id.toString() : null;
+        switch (message.type) {
+            case 'interactive_message_callback':
+            case 'interactive_message':
+                callback_id = message.callback_id.toString()
+                let action_id = message.actions[0].name //compare against config
+                let trigger = message.trigger_id
+                break;
+            case 'block_actions':
+                break;
+            case 'slash_command':
+                let slash = this.__config.listeners.slash
+                //get command
+                let command = message.command
+                //check if there's a secondary command
+                let split = (message.text && message.text.length() > 0) ? message.text.split(' ') : []
+                let secondary =  split.length() > 0 ? split[0] : null
+                //test if the main slash command is in listeners
+                if (!(command.toLowerCase() in slash.keys())){
+                    next()
+                }
+                // test if there's a secondary listener to pay attention to
+                let secondary_listeners = slash[command];
+                if (secondary_listeners && !(secondary in _.castArray(secondary_listeners))) {
+                    next()
+                }
+                primary = split.shift()
+                break;
+            case 'modal':
+                break;
+            case 'modal_submission':
+            case 'dialog_submission':
+                callback_id = message.callback_id.toString()
+                bot.dialogOk()
+                break;
+            case 'direct_mention':
+                break;
+        }
+        //get message type
+        //
 
         // only call next if message doesn't need to be intercepted...
         next();
