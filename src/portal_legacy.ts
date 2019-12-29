@@ -6,21 +6,18 @@
  * Licensed under the MIT License.
  */
 
-
-// this is what we're publicly exposing as the plugin
-import { Botkit, BotWorker } from "Botkit"
+import { SlackBot } from 'botkit_legacy'
 import axios, { AxiosRequestConfig, AxiosPromise } from 'axios';
-import { SlackBotWorker, SlackAdapter, SlackDialog } from "botbuilder-adapter-slack";
 import _ = require('lodash')
 import moment = require('moment');
 import btoa = require('base-64')
 import { createCipheriv, randomBytes } from 'crypto'
 import random = require('randomstring');
 
-export class BotkitPortalPlugin {
+export class BotkitLegacyPortalPlugin {
 
     private __config: any
-    private __controller: SlackAdapter
+    private __controller: SlackBot
     private __is_legacy: boolean
     private __receiver_url: string
     private __listener_url: string
@@ -81,8 +78,8 @@ export class BotkitPortalPlugin {
         } else {
             this.__passthrough = true
         }
-        if (! config.actions) {
-            config.actions = [this.PORTAL_CALLBACK_ID]
+        if (!config.callback_id) {
+            config.callback_id = this.PORTAL_CALLBACK_ID
         }
         this.__config = config;
     }
@@ -91,15 +88,14 @@ export class BotkitPortalPlugin {
      * 
      * @param botkit : requires an initialized botkit instance
      */
-    public init(botkit: Botkit): void {
+    public init(botkit: SlackBot): void {
         this.process_controller(botkit)
-        
-        if (!this.__is_legacy) {
-            this.__controller.addDep('portal')
-        }
-        const router = botkit.webserver 
-        // @ts-ignore // working with v0.7* apps too
-        let scopes = botkit.getConfig ? botkit.getConfig('scopes') : botkit.config.scopes
+        // @ts-ignore webserver exists if bot is running
+        const router = this.__config.webserver ? this.__config.webserver : botkit.webserver
+        if (!router) throw new Error('no_webserver_defined')
+
+        // @ts-ignore - scopes should be present
+        let scopes = botkit.config.scopes ? botkit.config.scopes : []
         if (!_.isArray(scopes)) scopes = scopes.split(',')
         if (! _.includes(scopes, 'bot') || _.every(scopes, (s) => ['im:history','im:write','im:read'].includes(s))){
             throw new Error('needs_im_scopes')
@@ -117,20 +113,44 @@ export class BotkitPortalPlugin {
         // ============ adds route for handling customer => client comms (passbacks) =========
 
         router.post(`/portal/update`, this.process_passback)
-        if (!this.__is_legacy) {
-            botkit.addPluginExtension('portal', this) //TODO I might just do this manually to keep people from exposing middlewares
-            this.__controller.completeDep('portal')
-        } else {
-            botkit.middleware.receive.use(this.process_incoming_message)
+        //@ts-ignore // this will also be present on a working system
+        botkit.middleware.receive.use(this.process_incoming_message)
+    }
+
+    private isParentMessage(message: any): boolean {
+        return (!message.thread_ts || message.thread_ts == message.ts)
+    } 
+
+    private async send_to_portal(data: any): Promise<void> {
+        try {
+            let headers = {
+                token: this.__config.portal_token
+            }
+            let result = await axios.post(`${this.__config.listener_url}/portal/intake`, data, {headers})
+            if (result.status != 200) {
+                return Promise.reject()
+            }
+            return Promise.resolve()
+        } catch (err) {
+            console.log(`send_to_portal failed: ${err}`)
+            return Promise.resolve()
         }
     }
 
-    public middlewares(botkit: Botkit): object {
-        return {
-            recieve: [this.process_incoming_message]
-        }
-    }
+    private async getParentMessage(message: any, bot: any): Promise<any> {
+        if (this.isParentMessage(message)) return message
+        return bot.api.conversations.history({
+            token: bot.config.token,
+            channel: message.channel,
+            latest: message.thread_ts,
+            limit: 1,
+            inclusive: true
+        }, (err, resp) => {
+            if (err) return Promise.reject(err)
+            return Promise.resolve(resp)
+        })
 
+    }
     // ===================== MESSAGE HANDLING (PRIVATE) ====================
     /**
      * 
@@ -138,23 +158,50 @@ export class BotkitPortalPlugin {
      * @param message 
      * @param next 
      */
-    private async process_incoming_message(bot: SlackBotWorker, message: any, next: Function): Promise<void> {
+    private async process_incoming_message(bot: any, message: any, next: Function): Promise<void> {
         // need to add is_portal and is_cancelled to manage this one
         this.log_usage(message)
-        //@ts-ignore working with 2 versions of botkit
-        let bot_id, token = null
-        if (this.__is_legacy) {
-            bot_id = bot.config.token ? bot.config.token : bot.config.bot.token
-            token = bot.config.token ? bot.config.token : bot.config.bot.token
-        } else {
-            bot_id = this.__controller.getTokenForTeam()
-        }
+        let bot_id = bot.config.token ? bot.config.token : bot.config.bot.token
+        let token = bot.config.token ? bot.config.token : bot.config.bot.token
+        let ticket_id = null
         let listners = this.__config.listeners
         switch (message.type) {
             case 'direct_message': //handle DMs to the bot, allow non-ticket thread responses to pass
-            case 'message_changed':
-                if (message.edited.user == bot.config.bot_id) return;)
+                if (this.isParentMessage(message)) break; // pass these along
+                ticket_id = this.get_ticket_id(await this.getParentMessage(message, bot))
+                if (!ticket_id) break; // no known ticket id - pass it on
+                return this.handle_dm(message, bot, next)
+            case 'message_changed': // got to filter this down!
+                if (message.edited.user == bot_id) return; // catch echos if this bot is editing messages
+                ticket_id = this.get_ticket_id(message)
+                if (!this.isParentMessage(message)) {
+                    try {
+                        ticket_id = this.get_ticket_id(await this.getParentMessage(message, bot))
+                    }
+                if (!ticket_id) break;
+                
+                await this.handle_update(message, bot, next)
+            case 'direct_mention': //ignoring 'mention' for the time being
+                let first_word = message.text.split(' ').pop()
+                if (!_.includes(listners.at_mention, first_word)) break;
+                await this.handle_atmention(message, bot)
+                if (!this.__passthrough) return
+                break;
+            case 'slash_command':
+
+            // these can launch a modal, but that's about it
+            case 'interactive_message_callback':
+            case 'block_actions':
+                if (! message.text || message.text.length() <=0) break;
+                if (! message.text.startsWith(this.__config.callback_id)) break;
+                // launch feedback modal
+            case 'message_action':
+                if (!message.callback_id.startsWith(this.__config.callback_id)) break;
+            // for handling portal modal
+            case 'view_closed':
+            case 'view_submitted':   
         }
+        next()
         switch (type) {
             // verify and get responses to ticket thread and pass on to portal
             case 'direct_message':

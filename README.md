@@ -25,7 +25,7 @@ The plugin defaults to listening for the following commands:
  /[feedback | support | <other specified type>] <any additional text>: this requires configuring corresponding slash commands for your app at https://api.slack.com/apps/<your_app_id>/slash-commands. 
  @<app name> [support | help | feedback| <other specified type>] <any additional text here>: we don't support free-text @mentions - like 'hey @<app>, can I get some help?' yet. @mentions cannot directly 
 
-if you want to trigger the support dialog/modal from an IM or BlockKit action, Portal listens for ```action_portal_launch[:<type>]``` callbacks by default. If you want to be able to specify a type (e.g.: 'Send us feedback' v. 'Make a support request'), you can append a type to the end of your callback_id. You can also use this pattern for message actions (configure at https://api.slack.com/apps/<your_app_id>/interactive-messages) if you'd like to use them.
+if you want to trigger the support dialog/modal from an IM or BlockKit action, Portal listens for ```action_portal_launch[:<type>]``` action values by default. If you want to be able to specify a type (e.g.: 'Send us feedback' v. 'Make a support request'), you can append a type to the end of your IM or Block button value. You can also use this pattern for a callback_id for message actions (configure at https://api.slack.com/apps/<your_app_id>/interactive-messages) if you'd like to use them.
 
 You can configure specific slash ('/') and at ('@') commands for your bot using the following format: 
 ```{
@@ -52,8 +52,8 @@ Initialize the plugin:
 ```javascript
 // import
 import { BotkitPortalPlugin } from 'botkit-portal-slack'
-// or
-let { BotkitPortalPlugin } = require('botkit-portal-slack)
+// or for legacy botkit apps (0.7/* and below)
+let { BotkitPortalPluginLegacy } = require('botkit-portal-slack)
 
 let portal = new BotkitPortalPlugin({
     receiver_url: 'https://your_app_URI/', 

@@ -7,3 +7,4 @@
  */
 
 export * from './portal';
+export * from './portal_legacy'
