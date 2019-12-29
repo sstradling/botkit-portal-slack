@@ -20,7 +20,6 @@ export class BotkitPortalPlugin {
 
     private __config: any
     private __controller: Botkit
-    private __botversion: string
     private __is_legacy: boolean
     private __receiver_url: string
     private __listener_url: string
@@ -66,15 +65,13 @@ export class BotkitPortalPlugin {
             let keywords = ['support','help','helpdesk','feedback']
             config.listeners = {
                 keywords,
-                slash: {
-                    feedback: null,
+                slash_command: {
+                    feedback: null, // null captures all text after /feedback
                     support: null,
                     help: null,
                     helpdesk: null
                 },
-
-                at_mention: keywords,
-                actions: [this.PORTAL_CALLBACK_ID]
+                at_mention: keywords
             }
             //create default listeners if nothing passed
         }
@@ -87,71 +84,47 @@ export class BotkitPortalPlugin {
             this.__passthrough = true
         }
         if (! config.actions) {
-            config.actions = [{this.PORTAL_CALLBACK_ID]
-        }
-        this.__usage = {
-            workspaces: [], //need # workspaces for billing/compare w/active users
-            slash: {t: 0, p: 0}, 
-            at: {t: 0, p: 0},
-            im: {t: 0, p: 0, c:0},
-            dialog: {t: 0, p: 0, c:0}
+            config.actions = [this.PORTAL_CALLBACK_ID]
         }
         this.__config = config;
     }
-
-    // private get_usage(): any {
-    //     let key = random.generate()
-    //     let out = []
-    //     //randomly encrypt/anonymize workspace ids
-    //     for ( let k of this.__usage.workspaces) { 
-    //         let cipher = createCipheriv('aes-256-cbc', Buffer.from(key), key);
-    //         let encrypted = cipher.update(k);
-    //         encrypted = Buffer.concat([encrypted, cipher.final()])
-    //         let data = encrypted.toString('hex')
-    //         out.push(data)
-    //     }
-    //     let data_block = Object.assign({}, this.__usage)
-    //     data_block.workspaces = out
-    //     return data_block
-    // }
-
-    private process_controller(controller: Botkit): void {
-        this.__controller = controller
-        this.__is_legacy = typeof controller.version == 'function'
-    }
-
-    // NOTE - for Bolt apps, can use init, then app.use(middleware)
-    // BUT, cannot get router (private), so I can't add a listener endpoint
-    // DARN...
+    
     /**
      * 
      * @param botkit : requires an initialized botkit instance
      */
     public init(botkit: Botkit): void {
         this.process_controller(botkit)
-        // console.log(`Botkit version: ${this.__botversion}`)
-        console.log('is_legacy? : ', this.__is_legacy)
+        
         if (!this.__is_legacy) {
             this.__controller.addDep('portal')
         }
-        const router = botkit.webserver //THIS MIGHT NOT WORK FOR LEGACY
-        // TODO verify that bot has necessary scopes (?) not sure this is necessary as we probably should just be using DMs?
-        //  -- this depends on how the origin app interacts with users - if it's DM-heavy, we'll need an alternative
-        // TODO need to figure out how to  initialize a handshake with the Portal servers/ handle billing info
+        const router = botkit.webserver 
+        // @ts-ignore // working with v0.7* apps too
+        let scopes = botkit.getConfig ? botkit.getConfig('scopes') : botkit.config.scopes
+        if (!_.isArray(scopes)) scopes = scopes.split(',')
+        if (! _.includes(scopes, 'bot') || _.every(scopes, (s) => ['im:history','im:write','im:read'].includes(s))){
+            throw new Error('needs_im_scopes')
+        }
+        // TODO handshake with portal to verify operation/use JWT instead of hard token?
+        let data = {
+            test: 'hi'
+        }
+        let headers = { 
+            content_type: 'application/json',
+            portal_auth_token: this.__config.portal_token
+        }
+        let init_resp = await axios.post(`${this.__listener_url}/portal/init`, data, {headers})
+        
         // ============ adds route for handling customer => client comms (passbacks) =========
+
         router.post(`/portal/update`, this.process_passback)
-        //TODO figure out usage stats - need to understand overall usage v/ portal usage, # of teams
         if (!this.__is_legacy) {
             botkit.addPluginExtension('portal', this) //TODO I might just do this manually to keep people from exposing middlewares
             this.__controller.completeDep('portal')
         } else {
             botkit.middleware.receive.use(this.process_incoming_message)
         }
-        // TODO send auth call to portal (?)
-        // the reasonable way would be to listen to incoming messages, log the associated workspace/enterprise, and append to a tracker in controller
-        // then I could send an updated list to portal when new ones pop up
-        // also let me see what proportion of messages involve support
-        console.log('portal_install_complete')
     }
 
     public middlewares(botkit: Botkit): object {
@@ -160,34 +133,16 @@ export class BotkitPortalPlugin {
         }
     }
 
-    // private process_workspace_data(bot, message): void {
-    //     let workspace_id
-    //     try{
-    //         workspace_id = bot.config.id
-    //     } catch (err) {
-    //         workspace_id = bot.getConfig('id') //hope this works!
-    //     }
-    //     if (!this.__usage.workspaces.includes(workspace_id)) {
-    //         this.__usage.workspaces.push(workspace_id)
-    //     }
-    // }
-    private async respond_at(bot: SlackBotWorker, message:any): Promise<void>  {
+    private async respond_atmention(bot: SlackBotWorker, message:any): Promise<void>  {
         let keywords = this.__config.listeners.at_mention
         if (!keywords || keywords.length() <=0) // continue to process
         if (!message.text || message.text.length() <= 0) // continue to process, only modal option
         if (message.type == 'direct_mention') {
             if (message.text)message.text.split(' ')[0]
         }
-        let action_word = 
-        if (message.type == 'mention') {
-
-        }
-
     }
 
-    private send_to_portal(data, type) {
 
-    }
     /**
      * 
      * @param bot 
@@ -195,6 +150,7 @@ export class BotkitPortalPlugin {
      * @param next 
      */
     private async process_incoming_message(bot: SlackBotWorker, message: any, next: Function): Promise<void> {
+        this.log_usage(bot, message)
         //@ts-ignore working with 2 versions of botkit
         let token = bot.getConfig ? bot.getConfig('token') : bot.config.token ? bot.config.token : bot.config.bot.token
         let type = message.type
@@ -220,7 +176,7 @@ export class BotkitPortalPlugin {
             case 'direct_mention':
             case 'mention': 
                 if (!listners.at_mention) break;
-                await this.respond_at(bot, message)
+                await this.respond_atmention(bot, message)
                 next()
                 // probably treat the same 
                 // get direct mention
@@ -361,9 +317,10 @@ export class BotkitPortalPlugin {
         }
     }
 
-    private async verify_passback(req): Promise<boolean> {
+    private verify_passback(req): boolean {
         //also be able to verify IP/origin URL?
         const originURL = req.protocol + '://' + req.get('host')
+        if (!req.headers.token || req.headers.token != this.__config.
         const originIP = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
         //TODO check timestamp - these messages shouldn't be more than 10 seconds off or so...
         return new Promise((resolve, reject) => {
@@ -375,5 +332,46 @@ export class BotkitPortalPlugin {
             }
         })
     }
+
+    // ================= UTILITIES =========================
+
+    private process_controller(controller: Botkit): void {
+        this.__controller = controller
+        this.__is_legacy = typeof controller.version == 'function'
+        this.__usage = {
+            workspaces: {}, //need # workspaces for billing/compare w/active users
+            slash: {t: 0, p: 0}, 
+            at: {t: 0, p: 0},
+            im: {t: 0, p: 0},
+            modal: {t: 0, tc:0, p: 0, pc:0}
+        }
+    }
+    //TODO this should be straightforward
+    private hashWorkspaceId(workspace_id: string ): string {
+        return workspace_id
+    }
+    // log anonymized usage
+    private log_usage(message: any): void {
+        let id = this.hashWorkspaceId(message.workspace_id)
+        this.__usage.workspaces[id] = moment().unix()
+        let type = null
+        switch (message.type) {
+            case 'slash_command':
+                type = 'slash'
+                break;
+            case 'mention':
+            case 'direct_mention':
+                this.__usage.at.t += 1
+                if (message.is_portal) this.__usage.slash.p += 1
+                break;
+        }
+        this.__usage[type].t += 1
+        if (message.is_cancelled && this.__usage[type].tc) this.__usage[type].tc +=1
+        if (message.is_portal) {
+            this.__usage[type].p += 1
+            if (message.is_cancelled && this.__usage[type].pc) this.__usage[type].pc += 1
+        }
+    }
+
 }
 

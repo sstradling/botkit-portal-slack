@@ -30,7 +30,7 @@ if you want to trigger the support dialog/modal from an IM or BlockKit action, P
 You can configure specific slash ('/') and at ('@') commands for your bot using the following format: 
 ```{
     listeners: {
-        slash: [
+        slash_command: [
             {
                 <slash command>: [list of secondary keywords (e.g.: support, help, feedback)]
                 <another command>: [] //an empty list tells portal to respond to the /command directly. This allows it to pull all text from the command as content - e.g.: /support I have a major complaint
