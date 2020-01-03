@@ -2,6 +2,6 @@
 
 # botkit-portal-slack changelog
 
-# 1.0.0 
+# 0.1.0 
 
 Initial setup and release
