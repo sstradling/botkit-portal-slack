@@ -1,8 +1,5 @@
 const _ = require('lodash')
-const btoa = require('base-64')
-const moment = require('moment')
 const axios = require('axios')
-const Botkit = require('botkit')
 const random = require('randomstring')
 const { promisify } = require('es6-promisify')
 const templates = require('./slack_templates')
