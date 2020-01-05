@@ -80,7 +80,7 @@ let portal = Portal.slack({
 });
 ```
 
-NOTE - the receiver URL should be the same base URL that you registered with Slack to receive Event API calls. Do not include `/slack/receive` or any other secondary routes, as Portal will set up its own route for handling cross-platform messages.
+NOTE - the receiver URL should be the same base URL that you registered with Slack to receive Event API calls. Do not include `/slack/receive` or any other secondary routes, as Portal generates its own routes for handling cross-platform messages.
 
 
 To install the plugin on bots using Botkit (v. 0.7.* and below):
