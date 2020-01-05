@@ -1,6 +1,6 @@
 {
   "name": "botkit-portal-slack",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Add in-app customer support and ticketing to your Botkit app",
   "main": "./src/index.js",
   "scripts": {
@@ -37,6 +37,9 @@
     "lodash": "4.17.15",
     "moment": "2.24.0",
     "randomstring": "1.1.5"
+  },
+  "peerDependencies": {
+    "botkit": ">0.6.15"
   },
   "devDependencies": {
     "mocha": "6.2.2",
