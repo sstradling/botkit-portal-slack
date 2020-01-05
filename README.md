@@ -20,7 +20,7 @@ const { Portal } = require('botkit-portal-slack');
 
 [link coming soon]
 
-When you install Portal, you will receive two tokens: a portal token (starts with `portalt_`) and a client secret (`portalc`). These are required for your app to interact with the Portal service 
+When you install Portal, you will receive two tokens: a portal token (starts with `portalt_`) and a client secret (`portalc_`). These are required for your app to interact with the Portal service 
 
 ## Use Portal in your App
 
@@ -53,7 +53,10 @@ You can configure specific slash ('/') and at ('@') commands for your bot using 
 }
 ```
 
+
 One last option is to enable/disable passthrough - enabling passthrough will have Portal stop processing messages directed to Portal, while keeping it disabled will have Portal pass all messages on to your bot once it's done. Passthrough is enabled by default.
+
+
 ```
  {
      ...
