@@ -11,7 +11,7 @@ module.exports = {
                 block_id: `${ticket_id}`,
                 text: {
                     type: "mrkdwn",
-                    text: `*Your ${type} Request:*`// ${trunc}`
+                    text: `*Your ${type} Request:*`
                 }
             },
             {
@@ -21,31 +21,7 @@ module.exports = {
                     type: "mrkdwn",
                     text: `>${message.text}`
                 }
-            },
-            // {
-            //     type: "actions",
-            //     block_id: "portal_edit_action",
-            //     elements: [{
-            //         type: "button",
-            //         style: "primary",
-            //         text: {
-            //             type: "plain_text",
-            //             text: "Edit Request",
-            //             emoji: true
-            //         },
-            //         value: `${message.text}`,
-            //         action_id: `edit_ticket:${message.portal_data.ticket_id}`
-            //     }]
-            // },
-            // {
-            //     type: "context",
-            //     elements: [
-            //         {
-            //             type: "mrkdwn",
-            //             text: "*Last Updated:* ${timestamp}: ${user}"
-            //         }
-            //     ]
-            // }
+            }
         ]
         return {
             text: message.text,
@@ -72,7 +48,7 @@ module.exports = {
             type: "modal",
             title: {
                 type: "plain_text",
-                text: `Contact Support`, // TODO allow bot name
+                text: `Contact Support`,
                 emoji: true
             },
             submit: {
@@ -95,61 +71,13 @@ module.exports = {
                         emoji: true
                     }
                 }
-                // {
-                //     type: "input",
-                //     element: {
-                //         action_id: "input_type",
-                //         type: "static_select",
-                //         placeholder: {
-                //             type: "plain_text",
-                //             text: "Request type",
-                //             emoji: true
-                //         },
-                //         options: [
-                //             {
-                //                 text: {
-                //                     type: "plain_text",
-                //                     text: "Support",
-                //                     emoji: true
-                //                 },
-                //                 value: "support"
-                //             },
-                //             {
-                //                 text: {
-                //                     type: "plain_text",
-                //                     text: "Feedback",
-                //                     emoji: true
-                //                 },
-                //                 value: "feedback"
-                //             },
-                //             {
-                //                 text: {
-                //                     type: "plain_text",
-                //                     text: "Help!",
-                //                     emoji: true
-                //                 },
-                //                 value: "help"
-                //             }
-                //         ]
-                //     },
-                //     label: {
-                //         type: "plain_text",
-                //         text: "Select a request type",
-                //         emoji: true
-                //     }
-                // }
             ]
         }
         return view
-
     },
+
     dm_response: (keyword=null, text=null) => {
-        // builds an ephemeral message that asks if
-        // 1) you'd like to send the text directly to the app publisher, or
-        // 2) you'd like to edit it and send it, or
-        // 3) you don't want to send anything
         let message_text = `Hi! Do you want to`
-        let edit_text = 'Open New Request'
         if (keyword) {
             message_text = `Hi :wave: We heard you say \`${keyword}\` - do you want to`
             edit_text = 'Send Request'
@@ -171,7 +99,6 @@ module.exports = {
                 text: `>${text}`
             }
         })
-        // blocks.push({type: "divider"})
         let actions = {
 			type: "actions",
 			block_id: "portal_action"

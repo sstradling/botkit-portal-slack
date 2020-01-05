@@ -3,6 +3,7 @@ const axios = require('axios')
 const random = require('randomstring')
 const { promisify } = require('es6-promisify')
 const templates = require('./slack_templates')
+const crypto = require('crypto')
 
 let plugin
 
@@ -16,6 +17,10 @@ function BotkitPortalPlugin(config) {
     if (!config.receiver_url) throw new Error(`receiver_url missing: Need Slack app base URL to recieve validate incoming responses from the Portal app`)
     if (!config.portal_token) throw new Error(`config.portal_token missing: Need an authentication token from the Portal app`)
     if (!config.client_secret) throw new Error(`config.client_token missing: Need a client verification token to validate incoming responses from the Portal app`)
+    // This adds default listeners - will listen for: 
+    //  - `/<your-slash-command> [support|help|helpdesk|feedback], 
+    //  - /[support|help|helpdesk|feedback] if you set any of them up as available slash commands in your app
+    //  - an @mention of your app with [support|help|helpdesk|feedback] as a keyword: e.g.: @<your bot> support [user text here]
     if (!config.listeners) {
         let keywords = ['support','help','helpdesk','feedback']
         config.listeners = {
@@ -35,11 +40,6 @@ function BotkitPortalPlugin(config) {
     plugin.no_passthrough = config.no_passthrough ? config.no_passthrough : false
     setupUsageTracker(plugin)
     plugin.init = (controller) => init(controller)
-    // plugin.verifyPassback = (req) => verifyPassback(plugin, req)
-    // plugin.processPassback = (req, res) => processPassback(plugin, req, res)
-    // plugin.processIncomingMessage = (bot, message, next) => processIncomingMessage(plugin, bot, message, next)
-    // plugin.handle_dm()
-
     return plugin
 }
 
@@ -48,6 +48,14 @@ async function init(controller) {
         plugin.controller = controller
         let router = plugin.config.webserver ? plugin.config.webserver : controller.webserver
         if (!router) throw new Error('no_webserver_found')
+        router.use((req, res, next) => {
+            req.portalRaw = '';
+            req.on('data', (chunk) => {
+                req.portalRaw += chunk;
+            });
+            next();
+        });
+
         let scopes = controller.config.scopes? controller.config.scopes : []
         if (!_.isArray(scopes)) scopes = scopes.split(',')
         if (!_.includes(scopes, 'bot') && _.size(_.intersection(scopes, ['im:history','im:write','im:read'])) != 3) {
@@ -63,11 +71,11 @@ async function init(controller) {
     }
 }
 
-//TODO use message encryption/hash for passback validation as with Slack
-// should receive a properly-configured message for slack
+
 const processPassback = async (req, res) => {
     try {
         plugin.controller.asyncFindTeam = promisify(plugin.controller.findTeamById)
+        // if (!validatePassback(req)) throw new Error('invalid_auth')
         if (!req.headers.client_secret || req.headers.client_secret != plugin.config.client_secret) throw new Error('invalid_auth')
         if (!req.body && !req.data) throw new Error('missing_data')
         let data = (req.body) ? req.body : req.data
@@ -136,8 +144,6 @@ const processIncomingMessage = async (bot, message, next) => {
                 await sendToPortal(message)
                 if (plugin.no_passthrough) return
                 return next();
-            // case 'app_mention':
-            // case 'mention':
             case 'direct_mention':
                 return handleMention(bot, message, next)
             case 'block_actions':
@@ -202,7 +208,7 @@ const processIncomingMessage = async (bot, message, next) => {
                     default:
                         return next()
                 }
-            case 'slash_command': // slash is always a nightmare
+            case 'slash_command': 
                 bot.replyAcknowledge()
                 let commands = plugin.config.listeners.slash_command || null
                 let keyList = plugin.config.listeners.keywords || []
@@ -217,8 +223,6 @@ const processIncomingMessage = async (bot, message, next) => {
                 let has_command = (commands) ? _.includes(_.keys(commands), command) : false
                 let in_commandList = _.includes(commandList, keyword)
                 let in_keyList = _.includes(keyList, keyword)
-                // !!! if there's a command, and no command list, it goes
-                // commandList means there's a command, and a list - reject no keyword match. 
                 message.modal_content = message.text
                 message.action_type = 'support'
                 if (commandList.length > 0){
@@ -226,7 +230,6 @@ const processIncomingMessage = async (bot, message, next) => {
                     message.modal_content = remainder
                     message.action_type = keyword
                 } else if (!has_command) {
-                    // if there's no command match, no keylist, or no key match, then reject
                     if (!in_keyList) return next()
                     message.modal_content = remainder
                     message.action_type = keyword
@@ -238,25 +241,10 @@ const processIncomingMessage = async (bot, message, next) => {
                 return next()
         }
     } catch (err) {
-        console.log(err)
+        console.log(`portal_receive_middleware_failure: ${err}`)
         next()
     }
 }
-
-//STUB
-const validateModal = (bot, inputs) => {
-    return true
-}
-
-const sendUpdatedTicketToPortal = async (bot, message, next) => {
-    try {
-
-
-    } catch (err) {
-        console.log(`portal_update_ticket_failed: ${err}`)
-    }
-}
-
 const sendNewTicketToPortal = async (bot, message, next) => {
     try {
         let ticket = templates.new_support_ticket(message, message.portal_data.ticket_id)
@@ -282,12 +270,11 @@ const sendNewTicketToPortal = async (bot, message, next) => {
     return next()
 }
 
-//TODO there's something going on here...
 const launchSupportModal = async (bot, message, next) => {
     try{
         if (!message.trigger_id) return next()
         let view = templates.support_modal(message.modal_content|| null)
-        //TODO just serialize an object already
+        //TODO just serialize an object already!
         view.private_metadata = `${message.user.id||message.user}_${message.channel}_${message.ts}_${message.action_type}_${message.response_url||null}`
         view.callback_id = plugin.callback_id
         let data = {
@@ -295,7 +282,6 @@ const launchSupportModal = async (bot, message, next) => {
             token: bot.config.token || bot.config.bot.token,
             view
         }
-        // console.log(JSON.stringify(view, null, 2))
         let result = await bot.async.views.open(data)
         if (plugin.no_passthrough) return result
     } catch (err) {
@@ -344,18 +330,17 @@ const handleDirectMessage = async (bot, message, next) => {
         }
         if (isParentMessage(message)) return next()
         let ticket_id = await get_ticket_id(message, bot)
-        if (!ticket_id) return next() // not messing with non-support threads
+        if (!ticket_id) return next()
         portal_data.ticket_id = ticket_id
         portal_data.type = 'response'
         message.portal_data = portal_data
         response = await sendToPortal(message)
-        if (plugin.no_passthrough) return // cut off middleware
+        if (plugin.no_passthrough) return 
         next()
     } catch (err) {
         console.log(`direct_message_failed: ${err}`)
     }
 }
-
 
 const get_portal_data = async (message, bot) => {
     let data = {
@@ -363,6 +348,7 @@ const get_portal_data = async (message, bot) => {
         client_id: bot.config.id,
         callback_url: plugin.config.receiver_url
     }
+
     try {
         let token = bot.config.token || bot.config.bot.token
         let team_promise = bot.async.auth.test({token})
@@ -378,15 +364,6 @@ const get_portal_data = async (message, bot) => {
     return data
 }
 
-
-// OK, we're creating ids that are passed to portal main. 
-// If the parent is created by us, there'll be a ticket id embedded
-// Really, tickets are only created by dialog so far (?)
-//  - if we choose to allow in-situ tickets, we'll need to rethink this (maybe first child thread?)
-// if not: 
-//  1) it's a thread of a ticket - check the parent for an id
-//  2) it's a new parent ticket - handle this separately
-//  3) it's a thread of a non-ticket, or ambient dm. ignore.
 const get_ticket_id = async (message, bot) => {
     if (message.ticket_id) return message.ticket_id
     try {
@@ -409,7 +386,6 @@ const get_ticket_id = async (message, bot) => {
     }
 }
 
-//TODO - if this is deterministic, then I don't have to embed ticket ids.
 const create_ticket_id = (message, bot) => {
     return `portal_ticket:${bot.config.id|| message.team.id || message.team}_${message.channel}_${random.generate()}`
 }
@@ -419,6 +395,7 @@ function isParentMessage(message) {
 }
 
 // TODO have this trigger a check on the receiver route, verify that plugin functions
+// TODO have this pass templates for processing - make updates easier
 async function initiateHandshake(plugin) {
     let data = {
         // add data on host app for id? app_user_id/app_name?
@@ -431,15 +408,13 @@ async function initiateHandshake(plugin) {
     if (handshake.status == 200) {
         if (!handshake.headers.client_secret || handshake.headers.client_secret != plugin.config.client_secret) {
             throw new Error('response_auth_invalid')
-        } else {
-            console.log('handshake complete')
         }
+        console.log('handshake complete')
     } else {
         throw new Error(`handshake_failed: ${handshake.status}`)
     }
 }
 
-// structure message w/ portal data prior to passing
 const sendToPortal = async (message) => {
     let post_headers = { 
         content_type: 'application/json',
@@ -462,62 +437,7 @@ const sendToPortal = async (message) => {
 
 }
 
-function verifyPassback(req) {
-    const originURL = req.protocol + '://' + req.get('host')
-    if (!originURL != plugin.config.portal_url) return false
-    return (req.headers.token && req.headers.token == plugin.config.client_secret)
-}
-
-// function hashWorkspaceId(id) {
-//     return workspace_id
-// }
-// function getUsage(plugin) {
-//     try {
-//         return btoa.encode(JSON.stringify(plugin.usage))
-//     } catch (err) {
-//         return 'usage_stats_failed'
-//     }
-// }
-// function logUsage(plugin, message) {
-//     let id = hashWorkspaceId(message.workspace_id)
-//     plugin.usage.workspaces[id] = moment().unix()
-//     let type = null
-//     switch (message.type) {
-//         case 'slash_command':
-//             type = 'slash'
-//             break;
-//         case `message_action`:
-//             type = 'm_action'
-//             break;
-//         case `block_actions`:
-//             type = 'b_action'
-//             break;
-//         case 'mention':
-//         case 'direct_mention':
-//             type = 'dm'
-//             break;
-//         case 'view_submission':
-//         case 'view_closed':
-//             type = 'modal'
-//             break;
-//         default:
-//             break;
-//     }
-//     plugin.usage[type].t += 1
-//     if (message.type == 'view_closed') {
-//         if (message.is_cleared) plugin.usage[type].tc +=1
-//         else plugin.usage[type].tx +=1
-//     }
-//     if (message.is_portal) {
-//         plugin.usage[type].p += 1
-//         if (message.type == 'view_closed') {
-//             if (message.is_cleared) plugin.usage[type].pc +=1
-//             else plugin.usage[type].px +=1
-//         }
-//     }
-
-// }
-
+// TODO not implemented
 function setupUsageTracker(plugin) {
     plugin.usage = {
         workspaces: {}, //need # workspaces for billing/compare w/active users
@@ -528,10 +448,7 @@ function setupUsageTracker(plugin) {
         im: {t: 0, p: 0},
         modal: {t: 0, tx: 0, tc:0, p: 0, px:0, pc:0} //track modal closures and cancels
     }
-    // plugin.logUsage = (message) => logUsage(plugin, message)
-    // plugin.getUsage = () => getUsage(plugin)
 }
-
 
 //takes an object/collection and recursively promisifies all down-tree functions.
 const promisifyAPI = (obj) => {
@@ -542,5 +459,37 @@ const promisifyAPI = (obj) => {
     })
     return obj
 }
+
+// TODO Uses validation process similar to Slack client signing
+const validatePassback = (req) => {
+    try {
+        let timestamp = req.header('X-Portal-Request-Timestamp');
+        if (!body) throw new Error('no_timestamp')
+        let signature = req.header(`X-Portal-Signature`)
+        if (!body) throw new Error('no_signature')
+        let body = req.rawBody
+        let version = signature.split('=')[0]
+        if (!body) throw new Error('no_raw_request_data')
+        let basestring = `${version}:${timestamp}:${body}`
+        const base = crypto.createHmac('sha256', plugin.config.client_secret).update(basestring).digest('hex')
+        const hash = `${version}=${base}`
+
+        const validSignature = () => {
+            const slackSigBuffer = new Buffer(retrievedSignature);
+            const compSigBuffer = new Buffer(hash);
+            return crypto.timingSafeEqual(slackSigBuffer, compSigBuffer);
+        }
+        return validSignature()
+    } catch (err) {
+        console.log(`incoming_portal_validation_failed: ${err.message}`)
+        return false
+    }
+}
+
+//STUB - use later if we want to add modal validation params
+const validateModal = (bot, inputs) => {
+    return true
+}
+
 
 module.exports = BotkitPortalPlugin
