@@ -70,12 +70,12 @@ Initialize the plugin:
 
 ```javascript
 // or for legacy botkit apps (0.7/* and below)
-let Portal = require('botkit-portal-slack)
+let Portal = require('botkit-portal-slack')
 
 let portal = Portal.slack({
     receiver_url: 'https://your_app_URI/', 
     portal_token: 'token_from_portal_setup', // DO NOT commit the actual token into your source code
-    client_secret: 'other_token_from_portal, // DO NOT commit this token either.
+    client_secret: 'other_token_from_portal', // DO NOT commit this token either.
     listeners: {} // see the discussion of listeners above
 });
 ```
@@ -96,4 +96,5 @@ Once registered, Botkit will automatically integrate Portal into your bot, where
 
 ## Requirements
 
-*coming soon*
+Botkit (v 0.7.5 and below)
+Node (>8.0.0)
