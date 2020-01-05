@@ -21,22 +21,27 @@ const { Portal } = require('botkit-portal-slack');
 Configure the plugin with the URI of your app instance, and the portal token and client signing secret you'll recieve when you install the Portal app.
 
 The plugin defaults to listening for the following commands:
- /<your_app_slash_command> [feedback | support | <other specified type>] <any additional text here> : launches our feedback modal, prepopulated with any additional text included in the command. The modal also includes a dropdown populated with your pre-specified request types.
- /[feedback | support | <other specified type>] <any additional text>: this requires configuring corresponding slash commands for your app at https://api.slack.com/apps/<your_app_id>/slash-commands. 
- @<app name> [support | help | feedback| <other specified type>] <any additional text here>: we don't support free-text @mentions - like 'hey @<app>, can I get some help?' yet. @mentions cannot directly 
 
-if you want to trigger the support dialog/modal from an IM or BlockKit action, Portal listens for ```action_portal_launch[:<type>]``` action values by default. If you want to be able to specify a type (e.g.: 'Send us feedback' v. 'Make a support request'), you can append a type to the end of your IM or Block button value. You can also use this pattern for a callback_id for message actions (configure at https://api.slack.com/apps/<your_app_id>/interactive-messages) if you'd like to use them.
+- **/<your_app_slash_command> [feedback | support | ...other keywords] ...any additional text :** Launches our feedback modal, prepopulated with any additional text included in the command. 
+ 
+- **/[feedback | support | ... other keywords] ...any additional text:** This requires configuring corresponding slash commands for your app at https://api.slack.com/apps/[your_app_id]/slash-commands. 
+ 
+- **@your_app_name [support | help | feedback| ... other keywords ] ...any additional text:** This has the same functionality as slash commands.  We don't (yet) support free-text @mentions - like 'hey @awesome_app, can I get some help?'.
+
+- **Slack Actions:** If you want to trigger the support dialog/modal from an IM or BlockKit action, use ```action_portal_launch[:type]``` as your action_id. If you want to be able to specify a type (e.g.: feedback v. support requsets), you can append a type to the end of your IM or Block button value. 
+  - You can also use this pattern for a callback_id for message actions (configure at https://api.slack.com/apps/[your_app_id]/interactive-messages) if you'd like to use them.
 
 You can configure specific slash ('/') and at ('@') commands for your bot using the following format: 
 ```{
     listeners: {
+        keywords: [list of keywords] // use this if you have common keywords you want to listen for afer all app /commands
         slash_command: [
             {
                 <slash command>: [list of secondary keywords (e.g.: support, help, feedback)]
                 <another command>: [] //an empty list tells portal to respond to the /command directly. This allows it to pull all text from the command as content - e.g.: /support I have a major complaint
             }
         ],
-        at_mention: [list of secondary keywords],
+        at_mention: [list of secondary keywords], //If no secondary keywords are specified, then we respond to all @mention DMs
     }
 }```
 
@@ -47,33 +52,23 @@ One last option is to enable/disable passthrough - enabling passthrough will hav
      ...
  }```
 
-Finally, initialize the plugin and install into your app's Botkit controller:  
+Finally, initialize the plugin and install into your app's Botkit controller: 
 Initialize the plugin: 
 ```javascript
-// import
-import { BotkitPortalPlugin } from 'botkit-portal-slack'
 // or for legacy botkit apps (0.7/* and below)
-let { BotkitPortalPluginLegacy } = require('botkit-portal-slack)
+let Portal = require('botkit-portal-slack)
 
-let portal = new BotkitPortalPlugin({
+let portal = Portal.slack({
     receiver_url: 'https://your_app_URI/', 
     portal_token: 'token_from_portal_setup', // DO NOT commit the actual token into your source code
     client_secret: 'other_token_from_portal, // DO NOT commit this token either.
-    commands: {see above}
+    listeners: {} // see the discussion of listeners above
 });
 ```
-NOTE - the receiver URL should be the same base URL that you registered with Slack to receive Event API calls. Do not include '/slack/receive' or any other secondary routes, as portal will set up its own TLS 1.2 route for handling cross-platform messages.
+NOTE - the receiver URL should be the same base URL that you registered with Slack to receive Event API calls. Do not include '/slack/receive' or any other secondary routes, as portal will set up its own route for handling cross-platform messages.
 
-To install the plugin on bots using Botkit 4.*:
 
-```
-controller = new Botkit.slackbot(config)
-
-controller.usePlugin(portal)
-
-```
-
-To install the plugin on bots using legacy Botkit (v. 0.7.* and below):
+To install the plugin on bots using Botkit (v. 0.7.* and below):
 
 ```
 controller = new Botkit.slackbot(config)
