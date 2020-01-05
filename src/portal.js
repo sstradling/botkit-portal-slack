@@ -69,8 +69,10 @@ const processPassback = async (req, res) => {
     try {
         plugin.controller.asyncFindTeam = promisify(plugin.controller.findTeamById)
         if (!req.headers.client_secret || req.headers.client_secret != plugin.config.client_secret) throw new Error('invalid_auth')
-        if (!req.body) throw new Error('missing_data')
-        let data = (_.isString(req.body)) ? JSON.parse(req.body): req.body
+        if (!req.body && !req.data) throw new Error('missing_data')
+        let data = (req.body) ? req.body : req.data
+        data = (_.isString(data)) ? JSON.parse(data): data
+        if (!data.portal_data || !data.portal_data.ticket_id) throw new Error('missing_data')
         let {message, team_id, type, hash} = data
         if (!message || !team_id || !hash) throw new Error('missing_data')
         let team = await plugin.controller.asyncFindTeam(team_id)
@@ -86,7 +88,9 @@ const processPassback = async (req, res) => {
             case 'update':
                 response = await bot.async.chat.update(message)
         }
-        res.status(200).json({status: 'ok', hash: data.hash || 'none'})
+        response.message.channel = response.channel
+        res.set({token: team.portal_token})
+        res.status(200).json({status: 'ok', message: response.message})
     } catch (err) {
         try {
             let status = 400
@@ -98,7 +102,17 @@ const processPassback = async (req, res) => {
     }   
 }
 
-
+const handleMessageUpdate = async (bot, message, next) => {
+    if (!message.message.edited || (message.message.edited && message.message.edited.user == bot.config.bot.id)) return;
+    if (message.team == bot.config.id && _.includes(_.values(bot.config.channels), message.channel)) return next() // this is messing stuff up a bit.
+    message.previous_message.channel = message.channel
+    let ticket_id = await get_ticket_id(message.previous_message, bot)
+    if (!ticket_id) return next() //no ticket referenced
+    message.portal_data = await get_portal_data(message.message, bot)
+    message.portal_data.type = 'update'
+    message.portal_data.ticket_id = ticket_id
+    return sendToPortal(message)
+}
 
 const processIncomingMessage = async (bot, message, next) => {
     try {
@@ -110,10 +124,17 @@ const processIncomingMessage = async (bot, message, next) => {
             case 'direct_message': //check if dm is a convo
                 return handleDirectMessage(bot, message, next)
             case 'message_changed'://TODO later
-                if (message.edited.user == bot.config.bot_id) return;
-                return next();
+                return handleMessageUpdate(bot, message, next)
             case 'message_deleted'://TODO later
-                if (message.authed_users.includes(bot.config.bot_id)) return;
+                let deletedTicketId = await get_ticket_id(message, bot)
+                if (!deletedTicketId) return next()
+                message.user = ''
+                message.portal_data = {
+                    ticket_id: deletedTicketId,
+                    type: 'delete'
+                }
+                await sendToPortal(message)
+                if (plugin.no_passthrough) return
                 return next();
             // case 'app_mention':
             // case 'mention':
@@ -153,6 +174,7 @@ const processIncomingMessage = async (bot, message, next) => {
                 return next()
             case 'view_submission':
                 if (! message.view.callback_id.startsWith('action_portal_')) return next()
+                bot.replyAcknowledge()
                 let [user,channel,ts,sub_type, response_url] = message.view.private_metadata.split('_')
                 let inputs = _.values(message.view.state.values)[0]
                 if (!validateModal(bot, inputs)) return next()
@@ -166,7 +188,7 @@ const processIncomingMessage = async (bot, message, next) => {
                 message.text = inputs.input_text.value
                 message.portal_data.request_type = inputs.input_type || sub_type || 'support'
                 let result = await sendNewTicketToPortal(bot, message, next)
-                bot.replyAcknowledge()
+                // TODO send an ephemeral message if things go wrong
                 break;
             case 'message_action':
                 if (! message.callback_id || !message.callback_id.startsWith('action_portal_')) return next()
@@ -189,6 +211,7 @@ const processIncomingMessage = async (bot, message, next) => {
                 let command = message.command.slice(1) //drop first slash
                 let commandList = commands[command] || []
                 let [keyword, ...remainder] = (message.text != null) ? message.text.split(' ') : [null, null]
+                keyword = keyword.toLowerCase().trim()
                 remainder = (remainder) ? remainder.join(' ').trim() : remainder
                 if (remainder.length <= 0) remainder = null
                 let has_command = (commands) ? _.includes(_.keys(commands), command) : false
@@ -225,6 +248,15 @@ const validateModal = (bot, inputs) => {
     return true
 }
 
+const sendUpdatedTicketToPortal = async (bot, message, next) => {
+    try {
+
+
+    } catch (err) {
+        console.log(`portal_update_ticket_failed: ${err}`)
+    }
+}
+
 const sendNewTicketToPortal = async (bot, message, next) => {
     try {
         let ticket = templates.new_support_ticket(message, message.portal_data.ticket_id)
@@ -234,7 +266,10 @@ const sendNewTicketToPortal = async (bot, message, next) => {
         let new_msg = await bot.async.chat.postMessage(ticket)
         new_msg.token = ticket.token
         new_msg.message_ts = new_msg.ts
+        message.ts = new_msg.ts
+        message.channel = new_msg.channel
         message.portal_data.permalink = await bot.async.chat.getPermalink(new_msg)
+        // TODO have this update the ephemeral msg if sendToPortal fails for some reason
         bot.replyInteractive(message, {delete_original:true}, (err, resp) => {
             if (err) console.log(`Failed to delete menu: ${err}`)
         })
@@ -247,6 +282,7 @@ const sendNewTicketToPortal = async (bot, message, next) => {
     return next()
 }
 
+//TODO there's something going on here...
 const launchSupportModal = async (bot, message, next) => {
     try{
         if (!message.trigger_id) return next()
@@ -273,7 +309,7 @@ const handleMention = async (bot, message, next) => {
     let listeners = plugin.config.listeners
     if (!listeners.at_mention) return next()
     let dm_text = message.text.split(' ')
-    let first = dm_text.shift() || ''
+    let first = dm_text.shift().toLowerCase() || ''
     if (typeof listeners.at_mention != 'boolean') {
         if (!first || first.length <=0) return next()
         if (!listeners.at_mention.includes(first)) return next()
@@ -299,30 +335,31 @@ const handleMention = async (bot, message, next) => {
 }
 
 const handleDirectMessage = async (bot, message, next) => {
-    let portal_data = await get_portal_data(message, bot)
-    // TODO allow any @mention of the bot, swap to direct_mention
-    if (message.event.text && message.event.text.startsWith(`<@${bot.config.bot_id}`)) {
-        message.type = 'direct_mention'
-        return processIncomingMessage(bot, message, next)
+    try {
+        let portal_data = await get_portal_data(message, bot)
+        // TODO allow any @mention of the bot, swap to direct_mention
+        if (message.event.text && message.event.text.startsWith(`<@${bot.config.bot_id}`)) {
+            message.type = 'direct_mention'
+            return processIncomingMessage(bot, message, next)
+        }
+        if (isParentMessage(message)) return next()
+        let ticket_id = await get_ticket_id(message, bot)
+        if (!ticket_id) return next() // not messing with non-support threads
+        portal_data.ticket_id = ticket_id
+        portal_data.type = 'response'
+        message.portal_data = portal_data
+        response = await sendToPortal(message)
+        if (plugin.no_passthrough) return // cut off middleware
+        next()
+    } catch (err) {
+        console.log(`direct_message_failed: ${err}`)
     }
-    if (isParentMessage(message)) {
-        //check for a DM @message
-        return next()
-    }
-    let ticket_id = await get_ticket_id(message, bot)
-    if (!ticket_id) return next() // not messing with non-support threads
-    portal_data.ticket_id = ticket_id
-    portal_data.type = 'response'
-    message.portal_data = portal_data
-    response = await sendToPortal(message)
-    if (plugin.no_passthrough) return // cut off middleware
-    next()
 }
 
 
 const get_portal_data = async (message, bot) => {
     let data = {
-        user_id: message.user.id || message.user,
+        user_id: (_.isObject(message.user)) ? message.user.id : message.user,
         client_id: bot.config.id,
         callback_url: plugin.config.receiver_url
     }
@@ -330,10 +367,10 @@ const get_portal_data = async (message, bot) => {
         let token = bot.config.token || bot.config.bot.token
         let team_promise = bot.async.auth.test({token})
         let user_promise = bot.async.users.info({token, user: data.user_id})
-        let user = await user_promise
         let team = await team_promise
         data.client_name = team.team
         data.client_url = team.url
+        let user = await user_promise
         data.user_name = user.user.real_name || user.user.name || null
     } catch (err) {
         console.log(`error getting portal data: ${err}`)
@@ -374,7 +411,7 @@ const get_ticket_id = async (message, bot) => {
 
 //TODO - if this is deterministic, then I don't have to embed ticket ids.
 const create_ticket_id = (message, bot) => {
-    return `portal_ticket:${message.team.id || message.team}_${bot.config.id}_${random.generate()}`
+    return `portal_ticket:${bot.config.id|| message.team.id || message.team}_${message.channel}_${random.generate()}`
 }
 
 function isParentMessage(message) {
