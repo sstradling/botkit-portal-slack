@@ -34,11 +34,12 @@ The plugin defaults to listening for the following commands:
  
 - **@your_app_name [support | help | feedback| ... other keywords ] ...any additional text:** This has the same functionality as slash commands.  We don't (yet) support free-text @mentions - like 'hey @awesome_app, can I get some help?'.
 
-- **Slack Actions:** If you want to trigger the support dialog/modal from an IM or BlockKit action, use ```action_portal_launch[:type]``` as your action_id. If you want to be able to specify a type (e.g.: feedback v. support requsets), you can append a type to the end of your IM or Block button value. 
+- **Slack Actions:** If you want to trigger the support dialog/modal from an IM or BlockKit action, use `action_portal_launch[:type]` as your action_id. If you want to be able to specify a type (e.g.: feedback v. support requsets), you can append a type to the end of your IM or Block button value. 
   - You can also use this pattern for a callback_id for message actions (configure at https://api.slack.com/apps/[your_app_id]/interactive-messages) if you'd like to use them.
 
 You can configure specific slash ('/') and at ('@') commands for your bot using the following format: 
-```{
+```
+{
     listeners: {
         keywords: [list of keywords] // use this if you have common keywords you want to listen for afer all app /commands
         slash_command: [
@@ -49,17 +50,21 @@ You can configure specific slash ('/') and at ('@') commands for your bot using 
         ],
         at_mention: [list of secondary keywords], //If no secondary keywords are specified, then we respond to all @mention DMs
     }
-}```
+}
+```
 
 One last option is to enable/disable passthrough - enabling passthrough will have Portal stop processing messages directed to Portal, while keeping it disabled will have Portal pass all messages on to your bot once it's done. Passthrough is enabled by default.
- ```{
+```
+ {
      ...
      passthrough: true,
      ...
- }```
+ }
+ ```
 
 Finally, initialize the plugin and install into your app's Botkit controller: 
 Initialize the plugin: 
+
 ```javascript
 // or for legacy botkit apps (0.7/* and below)
 let Portal = require('botkit-portal-slack)
@@ -71,6 +76,7 @@ let portal = Portal.slack({
     listeners: {} // see the discussion of listeners above
 });
 ```
+
 NOTE - the receiver URL should be the same base URL that you registered with Slack to receive Event API calls. Do not include `/slack/receive` or any other secondary routes, as Portal will set up its own route for handling cross-platform messages.
 
 
