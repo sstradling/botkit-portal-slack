@@ -16,9 +16,15 @@ Import the adapter class into your code:
 const { Portal } = require('botkit-portal-slack');
 ```
 
-## Use in your App
+## Install Portal slack app in your Slack workspace
 
-Configure the plugin with the URI of your app instance, and the portal token and client signing secret you'll recieve when you install the Portal app.
+[link coming soon]
+
+When you install Portal, you will receive two tokens: a portal token (starts with `portalt_`) and a client secret (`portalc`). These are required for your app to interact with the Portal service 
+
+## Use Portal in your App
+
+Configure the plugin with the URI of your app instance, and the portal token and client signing secret you'll receive when you install the Portal app.
 
 The plugin defaults to listening for the following commands:
 
@@ -65,7 +71,7 @@ let portal = Portal.slack({
     listeners: {} // see the discussion of listeners above
 });
 ```
-NOTE - the receiver URL should be the same base URL that you registered with Slack to receive Event API calls. Do not include '/slack/receive' or any other secondary routes, as portal will set up its own route for handling cross-platform messages.
+NOTE - the receiver URL should be the same base URL that you registered with Slack to receive Event API calls. Do not include `/slack/receive` or any other secondary routes, as Portal will set up its own route for handling cross-platform messages.
 
 
 To install the plugin on bots using Botkit (v. 0.7.* and below):
@@ -78,3 +84,7 @@ portal.init(controller)
 
 Once registered, Botkit will automatically integrate Portal into your bot, where it will listen for support/helpdesk/feedback requests and pass support conversations back and forth between your app and your Slack workspace. 
 
+
+## Requirements
+
+*coming soon*
