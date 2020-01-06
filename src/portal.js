@@ -48,14 +48,6 @@ async function init(controller) {
         plugin.controller = controller
         let router = plugin.config.webserver ? plugin.config.webserver : controller.webserver
         if (!router) throw new Error('no_webserver_found')
-        router.use((req, res, next) => {
-            req.portalRaw = '';
-            req.on('data', (chunk) => {
-                req.portalRaw += chunk;
-            });
-            next();
-        });
-
         let scopes = controller.config.scopes? controller.config.scopes : []
         if (!_.isArray(scopes)) scopes = scopes.split(',')
         if (!_.includes(scopes, 'bot') && _.size(_.intersection(scopes, ['im:history','im:write','im:read'])) != 3) {

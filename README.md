@@ -54,7 +54,7 @@ You can configure specific slash ('/') and at ('@') commands for your bot using 
 ```
 
 
-One last option is to enable/disable passthrough - enabling passthrough will have Portal stop processing messages directed to Portal, while keeping it disabled will have Portal pass all messages on to your bot once it's done. Passthrough is enabled by default.
+One last option is to enable/disable passthrough - keeping passthrough enabled will have Portal pass all messages on to your bot once it's done, while disabling it will have Portal stop processing messages directed to Portal once they are processed. Passthrough is enabled by default, but we recommend disabling it if you have no plans to log/register/conduct additional processing.
 
 
 ```
