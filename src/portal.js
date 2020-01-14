@@ -55,7 +55,7 @@ async function init(controller) {
         }
         router.post('/portal/update', processPassback)
         controller.middleware.receive.use(processIncomingMessage)
-        await initiateHandshake(plugin)
+        // await initiateHandshake(plugin)
         console.log('portal_init_complete')
     } catch (err) {
         console.error(`portal_init_failed: ${err}`)

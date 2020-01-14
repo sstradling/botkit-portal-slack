@@ -1,28 +1,35 @@
 console.log('loading_templates')
 const _ = require('lodash')
+const { block, element, object, TEXT_FORMAT_MRKDWN } = require('slack-block-kit')
+const { text, confirm, option, optionGroup, optionGroups } = object
+const {  
+    button, overflow, staticSelect, externalSelect, 
+    usersSelect, conversationsSelect, channelsSelect,
+    datePicker,
+  } = element
+
+const { section, actions, divider, context, image } = block
+
 module.exports = {
 
     new_support_ticket: (message, ticket_id) => {
         let type = message.portal_data.request_type
         type = type.charAt(0).toUpperCase() + type.slice(1)
-        let blocks = [
+        let blocks = []
+        blocks.push(section(
+            text(`*Your ${type} Request:*`, TEXT_FORMAT_MRKDWN),
             {
-                type: "section",
                 block_id: `${ticket_id}`,
-                text: {
-                    type: "mrkdwn",
-                    text: `*Your ${type} Request:*`
-                }
-            },
-            {
-                type: "section",
-                block_id: "ticket_message",
-                text: {
-                    type: "mrkdwn",
-                    text: `>${message.text}`
-                }
+                
             }
-        ]
+        ))
+        blocks.push(section(
+            text(`>${message.text}`, TEXT_FORMAT_MRKDWN),
+            {
+                block_id: `ticket_message`,
+                
+            }
+        ))
         return {
             text: message.text,
             blocks
@@ -31,6 +38,7 @@ module.exports = {
 
     // ignoring select until we have the rest worked out
     support_modal: (text) => {
+
         let input = {
             type: "plain_text_input",
             multiline: true,
