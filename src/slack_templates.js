@@ -1,4 +1,3 @@
-console.log('loading_templates')
 const _ = require('lodash')
 const { block, element, object, view, TEXT_FORMAT_MRKDWN } = require('slack-block-kit')
 const { text, confirm, option, optionGroup, optionGroups } = object
@@ -17,6 +16,7 @@ module.exports = {
         type = type.charAt(0).toUpperCase() + type.slice(1)
 
         let header_block = section(text(`*Your ${type} Request:*`, TEXT_FORMAT_MRKDWN),{ block_id: `${ticket_id}` })
+        header_block.block_id = `${ticket_id}`
         let message_block = section(text(`>${message.text}`, TEXT_FORMAT_MRKDWN),{ block_id: `ticket_message`})
 
         // let edit_button = button(action_id, text_value, {url, value, confirm, style})

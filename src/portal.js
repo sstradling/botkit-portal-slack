@@ -55,7 +55,7 @@ async function init(controller) {
         }
         router.post('/portal/update', processPassback)
         controller.middleware.receive.use(processIncomingMessage)
-        // await initiateHandshake(plugin)
+        await initiateHandshake(plugin)
         console.log('portal_init_complete')
     } catch (err) {
         console.error(`portal_init_failed: ${err}`)
@@ -226,7 +226,6 @@ const processIncomingMessage = async (bot, message, next) => {
                     message.modal_content = remainder
                     message.action_type = keyword
                 }
-                bot.replyAcknowledge()
                 message.ts = 'slash'
                 return launchSupportModal(bot, message, next)
             default:
@@ -265,15 +264,17 @@ const sendNewTicketToPortal = async (bot, message, next) => {
 const launchSupportModal = async (bot, message, next) => {
     try{
         if (!message.trigger_id) return next()
-        let view = templates.support_modal(message.modal_content|| null)
+        metadata = `${message.user.id||message.user}_${message.channel}_${message.ts}_${message.action_type}_${message.response_url||null}`
+        let view = templates.support_modal(message.modal_content|| null, metadata, plugin.callback_id)
         //TODO just serialize an object already!
-        view.private_metadata = `${message.user.id||message.user}_${message.channel}_${message.ts}_${message.action_type}_${message.response_url||null}`
-        view.callback_id = plugin.callback_id
+        // view.private_metadata = 
+        // view.callback_id = plugin.callback_id
         let data = {
             trigger_id: message.trigger_id,
             token: bot.config.token || bot.config.bot.token,
             view
         }
+        // console.log(JSON.stringify(data, null, 2))
         let result = await bot.async.views.open(data)
         if (plugin.no_passthrough) return result
     } catch (err) {

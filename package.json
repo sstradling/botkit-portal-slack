@@ -21,7 +21,12 @@
     "bots",
     "support",
     "plugin",
-    "chatbots"
+    "chatbots",
+    "in-app messaging",
+    "customer support",
+    "feedback",
+    "in-app customer support",
+    "slackbot"
   ],
   "author": "seth.stradling@convobox.com",
   "license": "MIT",
