@@ -21,7 +21,12 @@
     "bots",
     "support",
     "plugin",
-    "chatbots"
+    "chatbots",
+    "in-app messaging",
+    "customer support",
+    "feedback",
+    "in-app customer support",
+    "slackbot"
   ],
   "author": "seth.stradling@convobox.com",
   "license": "MIT",
@@ -36,7 +41,8 @@
     "es6-promisify": "6.0.2",
     "lodash": "4.17.15",
     "moment": "2.24.0",
-    "randomstring": "1.1.5"
+    "randomstring": "1.1.5",
+    "slack-block-kit": "0.9.7"
   },
   "peerDependencies": {
     "botkit": ">0.6.15"
