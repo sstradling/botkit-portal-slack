@@ -19,8 +19,9 @@ const { Portal } = require('botkit-portal-slack');
 ## Install Portal slack app in your Slack workspace
 
 <a href="https://portalforslack.com/slack/install_npm" target="_blank">
-<img src="https://cdn.brandfolder.io/5H442O3W/as/pl54cs-bd9mhs-czsxst/btn-add-to-slack.svg"></img>
+<img src="https://cdn.brandfolder.io/5H442O3W/as/pl54cs-bd9mhs-czsxst/btn-add-to-slack.svg", width=150></img>
 </a>
+
 
 When you install Portal into your Slack workspace, you will receive two tokens: a portal token (starts with `portalt_`) and a client secret (`portalc_`). These are required for your app to interact with the Portal service 
 
@@ -99,4 +100,5 @@ Once registered, Botkit will automatically integrate Portal into your bot, where
 ## Requirements
 
 Botkit (v 0.7.5 and below)
+
 Node (>8.0.0)
