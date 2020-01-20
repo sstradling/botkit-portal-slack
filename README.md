@@ -18,7 +18,7 @@ const { Portal } = require('botkit-portal-slack');
 
 ## Install Portal slack app in your Slack workspace
 
-<a href="https://portalforslack.com/slack/install_npm" target="_blank">
+<a href="https://app.portalforslack.com/slack/install_npm" target="_blank">
 <img src="https://cdn.brandfolder.io/5H442O3W/as/pl54cs-bd9mhs-czsxst/btn-add-to-slack.svg", width=150></img>
 </a>
 
