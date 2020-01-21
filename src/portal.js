@@ -7,7 +7,7 @@ const crypto = require('crypto')
 
 let plugin
 
-function BotkitPortalPlugin(config) {
+const BotkitPortalPlugin = (config) => {
     plugin = {
         name: 'Slack Portal Plugin',
         config: config
@@ -43,7 +43,7 @@ function BotkitPortalPlugin(config) {
     return plugin
 }
 
-async function init(controller) {
+const init = async(controller) => {
     try {
         plugin.controller = controller
         let router = plugin.config.webserver ? plugin.config.webserver : controller.webserver
@@ -62,7 +62,6 @@ async function init(controller) {
         throw new Error(err)
     }
 }
-
 
 const processPassback = async (req, res) => {
     try {
@@ -102,6 +101,46 @@ const processPassback = async (req, res) => {
     }   
 }
 
+handleMessageAction = utlis.handleMessageAction
+
+
+const processIncomingMessage = async (bot, message, next) => {
+    try {
+        let list = 'direct_message,direct_mention,block_actions,view_submission,view_closed,message_deleted,message_changed,message_action,slash_command'.split(',')
+        if (!list.includes(message.type)) return next()
+        bot.async = promisifyAPI(bot.api) // for sanity
+        console.log(`this is a portal message: ${message.type}`)
+        switch (message.type) {
+            case 'direct_message':
+                return handleDirectMessage(bot, message, next)
+            case 'message_changed':
+                return handleMessageUpdate(bot, message, next)
+            case 'message_deleted':
+                return handleDeletedMessage(bot, message, next)
+            case 'direct_mention':
+                return handleMention(bot, message, next)
+            case 'block_actions':
+                return handleBlockAction(bot, message, next)
+            case 'view_closed':
+                if (! message.view.callback_id.startsWith('action_portal_')) return next()
+                bot.replyAcknowledge()
+                // TODO save/send stats
+                return next()
+            case 'view_submission':
+                return handleViewSubmission(bot, message, next)
+            case 'message_action':
+                return handleMessageAction(bot, message, next)
+            case 'slash_command': 
+                return handleSlashCommand(bot, message, next)
+            default:
+                return next()
+        }
+    } catch (err) {
+        console.log(`portal_receive_middleware_failure: ${err}`)
+        next()
+    }
+}
+
 const handleMessageUpdate = async (bot, message, next) => {
     if (!message.message.edited || (message.message.edited && message.message.edited.user == bot.config.bot.id)) return;
     if (message.team == bot.config.id && _.includes(_.values(bot.config.channels), message.channel)) return next() // this is messing stuff up a bit.
@@ -114,174 +153,6 @@ const handleMessageUpdate = async (bot, message, next) => {
     return sendToPortal(message)
 }
 
-const processIncomingMessage = async (bot, message, next) => {
-    try {
-        let list = 'direct_message,direct_mention,block_actions,view_submission,view_closed,message_deleted,message_changed,message_action,slash_command'.split(',')
-        if (!list.includes(message.type)) return next()
-        bot.async = promisifyAPI(bot.api) // for sanity
-        console.log(`this is a portal message: ${message.type}`)
-        switch (message.type) {
-            case 'direct_message': //check if dm is a convo
-                return handleDirectMessage(bot, message, next)
-            case 'message_changed'://TODO later
-                return handleMessageUpdate(bot, message, next)
-            case 'message_deleted'://TODO later
-                let deletedTicketId = await get_ticket_id(message, bot)
-                if (!deletedTicketId) return next()
-                message.user = ''
-                message.portal_data = {
-                    ticket_id: deletedTicketId,
-                    type: 'delete'
-                }
-                await sendToPortal(message)
-                if (plugin.no_passthrough) return
-                return next();
-            case 'direct_mention':
-                return handleMention(bot, message, next)
-            case 'block_actions':
-                let blockAction = message.actions[0].action_id
-                if (!blockAction.startsWith('action_portal_')) return next()
-                let [action, type]  = blockAction.replace('action_portal_','').split(':')
-                if (message.text == 'null') message.text = null
-                switch (action) {
-                    case 'cancel':
-                        if (message.response_url) {
-                            bot.replyInteractive(message, {delete_original:true}, (err, resp) => {
-                                if (err) console.log(`Failed to delete menu: ${err}`)
-                            })
-                        }
-                        return
-                    case 'send':
-                        message.portal_data = await get_portal_data(message, bot)
-                        message.portal_data.type = 'new'
-                        message.portal_data.request_type = type || 'support'
-                        message.portal_data.ticket_id = create_ticket_id(message, bot)
-                        return sendNewTicketToPortal(bot, message, next)
-                    case 'launch':
-                        message.modal_content = message.text
-                        message.ts = message.container.message_ts
-                        message.action_type = type || 'support'
-                        return launchSupportModal(bot, message, next)
-                    default:
-                        return next()
-                }
-            case 'view_closed':
-                if (! message.view.callback_id.startsWith('action_portal_')) return next()
-                bot.replyAcknowledge()
-                //save/send stats
-                return next()
-            case 'view_submission':
-                if (! message.view.callback_id.startsWith('action_portal_')) return next()
-                bot.replyAcknowledge()
-                let [user,channel,ts,sub_type, response_url] = message.view.private_metadata.split('_')
-                let inputs = _.values(message.view.state.values)[0]
-                if (!validateModal(bot, inputs)) return next()
-                message.channel = channel
-                message.ts = ts
-                message.user = user
-                message.response_url = response_url
-                message.portal_data = await get_portal_data(message, bot)
-                message.portal_data.ticket_id = create_ticket_id(message, bot)
-                message.portal_data.type='new'
-                message.text = inputs.input_text.value
-                message.portal_data.request_type = inputs.input_type || sub_type || 'support'
-                let result = await sendNewTicketToPortal(bot, message, next)
-                // TODO send an ephemeral message if things go wrong
-                break;
-            case 'message_action':
-                if (! message.callback_id || !message.callback_id.startsWith('action_portal_')) return next()
-                let [m_action, m_type]  = message.callback_id.replace('action_portal_','').split(':')
-                switch (m_action) {
-                    case 'launch':
-                        message.modal_content = message.message.text
-                        message.ts = message.message_ts
-                        message.action_type = m_type || 'support'
-                        return launchSupportModal(bot, message, next)
-                    default:
-                        return next()
-                }
-            case 'slash_command': 
-                bot.replyAcknowledge()
-                let commands = plugin.config.listeners.slash_command || null
-                let keyList = plugin.config.listeners.keywords || []
-                if (!commands && keyList.length <=0) return next() // nothing specified to catch
-                if (message.text == 'null') message.text = null
-                let command = message.command.slice(1) //drop first slash
-                let commandList = commands[command] || []
-                let [keyword, ...remainder] = (message.text != null) ? message.text.split(' ') : [null, null]
-                keyword = keyword.toLowerCase().trim()
-                remainder = (remainder) ? remainder.join(' ').trim() : remainder
-                if (remainder.length <= 0) remainder = null
-                let has_command = (commands) ? _.includes(_.keys(commands), command) : false
-                let in_commandList = _.includes(commandList, keyword)
-                let in_keyList = _.includes(keyList, keyword)
-                message.modal_content = message.text
-                message.action_type = 'support'
-                if (commandList.length > 0){
-                    if (!in_commandList) return next()
-                    message.modal_content = remainder
-                    message.action_type = keyword
-                } else if (!has_command) {
-                    if (!in_keyList) return next()
-                    message.modal_content = remainder
-                    message.action_type = keyword
-                }
-                message.ts = 'slash'
-                return launchSupportModal(bot, message, next)
-            default:
-                return next()
-        }
-    } catch (err) {
-        console.log(`portal_receive_middleware_failure: ${err}`)
-        next()
-    }
-}
-const sendNewTicketToPortal = async (bot, message, next) => {
-    try {
-        let ticket = templates.new_support_ticket(message, message.portal_data.ticket_id)
-        ticket.token = bot.config.token || bot.config.bot.token
-        let im = await bot.async.conversations.open({users: message.user.id || message.user, token: ticket.token})
-        ticket.channel = im.channel.id
-        let new_msg = await bot.async.chat.postMessage(ticket)
-        new_msg.token = ticket.token
-        new_msg.message_ts = new_msg.ts
-        message.ts = new_msg.ts
-        message.channel = new_msg.channel
-        message.portal_data.permalink = await bot.async.chat.getPermalink(new_msg)
-        // TODO have this update the ephemeral msg if sendToPortal fails for some reason
-        bot.replyInteractive(message, {delete_original:true}, (err, resp) => {
-            if (err) console.log(`Failed to delete menu: ${err}`)
-        })
-        await sendToPortal(message)
-        if (plugin.no_passthrough) return
-        return next()
-    } catch (err) {
-        console.log(`portal_send_ticket_failed: ${err}`)
-    }
-    return next()
-}
-
-const launchSupportModal = async (bot, message, next) => {
-    try{
-        if (!message.trigger_id) return next()
-        metadata = `${message.user.id||message.user}_${message.channel}_${message.ts}_${message.action_type}_${message.response_url||null}`
-        let view = templates.support_modal(message.modal_content|| null, metadata, plugin.callback_id)
-        //TODO just serialize an object already!
-        // view.private_metadata = 
-        // view.callback_id = plugin.callback_id
-        let data = {
-            trigger_id: message.trigger_id,
-            token: bot.config.token || bot.config.bot.token,
-            view
-        }
-        // console.log(JSON.stringify(data, null, 2))
-        let result = await bot.async.views.open(data)
-        if (plugin.no_passthrough) return result
-    } catch (err) {
-        console.log(`Failed to publish portal modal: ${err}`)
-    }
-    return next()
-}
 
 // TODO add logic for dealing with a mid/end-message @mention
 const handleMention = async (bot, message, next) => {
@@ -333,6 +204,19 @@ const handleDirectMessage = async (bot, message, next) => {
     } catch (err) {
         console.log(`direct_message_failed: ${err}`)
     }
+}
+
+const handleDeletedMessage = async (bot, message, next) => {
+    let deletedTicketId = await get_ticket_id(message, bot)
+    if (!deletedTicketId) return next()
+    message.user = ''
+    message.portal_data = {
+        ticket_id: deletedTicketId,
+        type: 'delete'
+    }
+    await sendToPortal(message)
+    if (plugin.no_passthrough) return
+    return next();
 }
 
 const get_portal_data = async (message, bot) => {
