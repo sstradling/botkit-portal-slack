@@ -39,7 +39,7 @@
     "base-64": "0.1.0",
     "botkit": "0.7.5",
     "es6-promisify": "6.0.2",
-    "lodash": "4.17.15",
+    "lodash": "4.17.21",
     "moment": "2.24.0",
     "randomstring": "1.1.5",
     "slack-block-kit": "0.9.7"
