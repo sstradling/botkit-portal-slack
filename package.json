@@ -40,7 +40,7 @@
     "botkit": "0.7.5",
     "es6-promisify": "6.0.2",
     "lodash": "4.17.15",
-    "moment": "2.24.0",
+    "moment": "2.29.4",
     "randomstring": "1.1.5",
     "slack-block-kit": "0.9.7"
   },
